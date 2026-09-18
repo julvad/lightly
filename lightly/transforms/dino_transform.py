@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Literal
 
 from PIL.Image import Image
 from torch import Tensor
@@ -9,6 +9,8 @@ from lightly.transforms.rotation import random_rotation_transform
 from lightly.transforms.solarize import RandomSolarization
 from lightly.transforms.torchvision_v2_compatibility import torchvision_transforms as T
 from lightly.transforms.utils import IMAGENET_NORMALIZE
+
+from sar_utils.transforms import log_transform, normalize_tensor
 
 
 class DINOTransform(MultiViewTransform):
@@ -53,11 +55,7 @@ class DINOTransform(MultiViewTransform):
         rr_prob:
             Probability that random rotation is applied.
         rr_degrees:
-            Range of degrees to select from for random rotation. If rr_degrees is None,
-            images are rotated by 90 degrees. If rr_degrees is a (min, max) tuple,
-            images are rotated by a random angle in [min, max]. If rr_degrees is a
-            single number, images are rotated by a random angle in
-            [-rr_degrees, +rr_degrees]. All rotations are counter-clockwise.
+            Degrees for a counter-clockwise rotation. Can be int, a list of int, or None in which case a random angle is picked within [90, 180, 270] to avoid nodata artifacts.
         cj_prob:
             Probability that color jitter is applied.
         cj_strength:
@@ -82,7 +80,7 @@ class DINOTransform(MultiViewTransform):
         solarization:
             Probability to apply solarization on the second global view.
         normalize:
-            Dictionary with 'mean' and 'std' for torchvision.transforms.Normalize.
+            Dictionary with 'mean' and 'std' for torchvision.transforms.Normalize. or None
 
     """
 
@@ -94,9 +92,9 @@ class DINOTransform(MultiViewTransform):
         local_crop_scale: Tuple[float, float] = (0.05, 0.4),
         n_local_views: int = 6,
         hf_prob: float = 0.5,
-        vf_prob: float = 0,
-        rr_prob: float = 0,
-        rr_degrees: Optional[Union[float, Tuple[float, float]]] = None,
+        vf_prob: float = 0.5,
+        rr_prob: float = 0.5,
+        rr_degrees: Optional[Union[List[int], int]] = None,
         cj_prob: float = 0.8,
         cj_strength: float = 0.5,
         cj_bright: float = 0.8,
@@ -107,7 +105,8 @@ class DINOTransform(MultiViewTransform):
         gaussian_blur: Tuple[float, float, float] = (1.0, 0.1, 0.5),
         sigmas: Tuple[float, float] = (0.1, 2),
         solarization_prob: float = 0.2,
-        normalize: Union[None, Dict[str, List[float]]] = IMAGENET_NORMALIZE,
+        normalize: Literal[None, 'imagenet'] = None, #jv edit
+        # normalize: Union[None, Dict[str, List[float]]] = IMAGENET_NORMALIZE, 
     ):
         # first global crop
         global_transform_0 = DINOViewTransform(
@@ -206,9 +205,9 @@ class DINOViewTransform:
         crop_size: int = 224,
         crop_scale: Tuple[float, float] = (0.4, 1.0),
         hf_prob: float = 0.5,
-        vf_prob: float = 0,
-        rr_prob: float = 0,
-        rr_degrees: Optional[Union[float, Tuple[float, float]]] = None,
+        vf_prob: float = 0.5,
+        rr_prob: float = 0.5,
+        rr_degrees: Optional[Union[List[int], int]] = None,
         cj_prob: float = 0.8,
         cj_strength: float = 0.5,
         cj_bright: float = 0.8,
@@ -219,7 +218,9 @@ class DINOViewTransform:
         gaussian_blur: float = 1.0,
         sigmas: Tuple[float, float] = (0.1, 2),
         solarization_prob: float = 0.2,
-        normalize: Union[None, Dict[str, List[float]]] = IMAGENET_NORMALIZE,
+        # normalize: Union[None, Dict[str, List[float]]] = IMAGENET_NORMALIZE,
+        normalize: Literal[None, 'imagenet'] = None, #jv edit
+        log:bool=False,
     ):
         """Initializes DINOViewTransform.
 
@@ -281,7 +282,16 @@ class DINOViewTransform:
         ]
 
         if normalize:
-            transform += [T.Normalize(mean=normalize["mean"], std=normalize["std"])]
+            if normalize=='imagenet':
+                normalize=IMAGENET_NORMALIZE
+            else:
+                transform += [T.Normalize(mean=normalize["mean"], std=normalize["std"])]
+        else:
+            transform.insert(0, T.transforms.Lambda(normalize_tensor)) # simple min-max norm-- NOTE: JV: for sar data, no point in using imagenet 
+
+        if log:
+            transform.insert(0, T.tranforms.Lambda(log_transform)) ##NOTE JV: for SAR data in amplitude units - converts to dB
+
         self.transform = T.Compose(transform)
 
     def __call__(self, image: Union[Tensor, Image]) -> Tensor:

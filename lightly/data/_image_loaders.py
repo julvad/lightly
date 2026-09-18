@@ -10,7 +10,7 @@ This module provides image loading functionality similar to torchvision's implem
 from PIL import Image
 
 
-def pil_loader(path: str) -> Image.Image:
+def pil_loader(path: str, channels:int=1) -> Image.Image:
     """Loads an image using PIL.
 
     Args:
@@ -23,7 +23,12 @@ def pil_loader(path: str) -> Image.Image:
     # (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, "rb") as f:
         img = Image.open(f)
-        return img.convert("RGB")
+        if channels==3:
+            return img.convert("RGB")
+        elif channels==1:
+            # return img.convert("I;16") #TODO: see if PIL modes uint16 (I;16) or uint32 (I) work
+            # return img.convert('L')
+            return img
 
 
 def accimage_loader(path: str) -> Image.Image:
@@ -57,9 +62,10 @@ def default_loader(path: str) -> Image.Image:
     Returns:
         An image loaded by either accimage or PIL depending on the backend.
     """
-    from torchvision import get_image_backend
+    # from torchvision import get_image_backend
 
-    if get_image_backend() == "accimage":
-        return accimage_loader(path)
-    else:
-        return pil_loader(path)
+    # if get_image_backend() == "accimage": #TODO jv: check how much faster this is
+    #     return accimage_loader(path)
+    # else:
+        # return pil_loader(path)
+    return pil_loader(path)

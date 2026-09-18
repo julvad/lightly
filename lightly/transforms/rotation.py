@@ -1,7 +1,7 @@
 # Copyright (c) 2020. Lightly AG and its affiliates.
 # All Rights Reserved
-
-from typing import Callable, Tuple, Union
+import random
+from typing import Callable, Tuple, Union, List
 
 import numpy as np
 from PIL.Image import Image
@@ -86,11 +86,18 @@ class RandomRotateDegrees:
 
 def random_rotation_transform(
     rr_prob: float,
-    rr_degrees: Union[None, float, Tuple[float, float]],
+    rr_degrees: Union[None, int, List[int]],
 ) -> Union[RandomRotate, T.RandomApply]:
-    if rr_degrees is None:
+    if isinstance(rr_degrees, list):
+        angle = random.choice(rr_degrees) # draw random angle (int) within list e.g. [90, 180, 270]
+        return RandomRotate(prob=rr_prob, angle=angle)
+    elif isinstance(rr_degrees, int):
+        return RandomRotate(prob=rr_prob, angle=rr_degrees)
+    elif rr_degrees is None:
         # Random rotation by 90 degrees.
-        return RandomRotate(prob=rr_prob, angle=90)
+        angle = random.choice([90, 180, 270])
+        return RandomRotate(prob=rr_prob, angle=angle)
+
     else:
         # Random rotation with random angle defined by rr_degrees.
         return RandomRotateDegrees(prob=rr_prob, degrees=rr_degrees)
